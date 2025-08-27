@@ -334,11 +334,13 @@ class StaticServiceDiscovery(ServiceDiscovery):
             endpoint_infos = self.get_endpoint_info()
             for endpoint_info in endpoint_infos:
                 if endpoint_info.model_label in self.prefill_model_labels:
+                    # TODO: fix Unclosed client session
                     self.app.state.prefill_client = aiohttp.ClientSession(
                         base_url=endpoint_info.url,
                         timeout=aiohttp.ClientTimeout(total=None),
                     )
                 elif endpoint_info.model_label in self.decode_model_labels:
+                    # TODO: fix Unclosed client session
                     self.app.state.decode_client = aiohttp.ClientSession(
                         base_url=endpoint_info.url,
                         timeout=aiohttp.ClientTimeout(total=None),
@@ -717,6 +719,14 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
         with self.known_models_lock:
             self.known_models.update(model_names)
 
+        try:
+            fut = asyncio.run_coroutine_threadsafe(
+                self.initialize_client_sessions(), self.app.state.event_loop
+            )
+            fut.result()
+        except Exception as e:
+            logger.error(f"Error initializing client sessions: {e}")
+
     def _delete_engine(self, engine_name: str):
         logger.info(f"Serving engine {engine_name} is deleted")
         with self.available_engines_lock:
@@ -809,9 +819,10 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
                     ):
                         await self.app.state.prefill_client.close()
                     self.app.state.prefill_client = aiohttp.ClientSession(
-                        base_url=endpoint_info.url,
-                        timeout=aiohttp.ClientTimeout(total=None),
-                    )
+                            base_url=endpoint_info.url,
+                            timeout=aiohttp.ClientTimeout(total=None),
+                        )
+                    
                 elif endpoint_info.model_label in self.decode_model_labels:
                     if (
                         hasattr(self.app.state, "decode_client")
@@ -819,9 +830,9 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
                     ):
                         await self.app.state.decode_client.close()
                     self.app.state.decode_client = aiohttp.ClientSession(
-                        base_url=endpoint_info.url,
-                        timeout=aiohttp.ClientTimeout(total=None),
-                    )
+                            base_url=endpoint_info.url,
+                            timeout=aiohttp.ClientTimeout(total=None),
+                        )
 
     def has_ever_seen_model(self, model_name: str) -> bool:
         """Check if we've ever seen this model, even if currently scaled to zero."""
@@ -1155,6 +1166,14 @@ class K8sServiceNameServiceDiscovery(ServiceDiscovery):
             # Store model information in the endpoint info
             self.available_engines[engine_name].model_info = model_info
 
+        try:
+            fut = asyncio.run_coroutine_threadsafe(
+                self.initialize_client_sessions(), self.app.state.event_loop
+            )
+            fut.result()
+        except Exception as e:
+            logger.error(f"Error initializing client sessions: {e}")
+
     def _delete_engine(self, engine_name: str):
         logger.info(f"Serving engine {engine_name} is deleted")
         with self.available_engines_lock:
@@ -1240,11 +1259,13 @@ class K8sServiceNameServiceDiscovery(ServiceDiscovery):
             endpoint_infos = self.get_endpoint_info()
             for endpoint_info in endpoint_infos:
                 if endpoint_info.model_label in self.prefill_model_labels:
+                    # TODO: fix Unclosed client session
                     self.app.state.prefill_client = aiohttp.ClientSession(
                         base_url=endpoint_info.url,
                         timeout=aiohttp.ClientTimeout(total=None),
                     )
                 elif endpoint_info.model_label in self.decode_model_labels:
+                    # TODO: fix Unclosed client session
                     self.app.state.decode_client = aiohttp.ClientSession(
                         base_url=endpoint_info.url,
                         timeout=aiohttp.ClientTimeout(total=None),
