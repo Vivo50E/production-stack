@@ -806,16 +806,16 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
                 if endpoint_info.model_label in self.prefill_model_labels:
                     # TODO: fix Unclosed client session
                     self.app.state.prefill_client = aiohttp.ClientSession(
-                            base_url=endpoint_info.url,
-                            timeout=aiohttp.ClientTimeout(total=None),
-                        )
-                    
+                        base_url=endpoint_info.url,
+                        timeout=aiohttp.ClientTimeout(total=None),
+                    )
+
                 elif endpoint_info.model_label in self.decode_model_labels:
                     # TODO: fix Unclosed client session
                     self.app.state.decode_client = aiohttp.ClientSession(
-                            base_url=endpoint_info.url,
-                            timeout=aiohttp.ClientTimeout(total=None),
-                        )
+                        base_url=endpoint_info.url,
+                        timeout=aiohttp.ClientTimeout(total=None),
+                    )
 
     def has_ever_seen_model(self, model_name: str) -> bool:
         """Check if we've ever seen this model, even if currently scaled to zero."""
