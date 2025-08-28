@@ -819,10 +819,10 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
                     ):
                         await self.app.state.prefill_client.close()
                     self.app.state.prefill_client = aiohttp.ClientSession(
-                            base_url=endpoint_info.url,
-                            timeout=aiohttp.ClientTimeout(total=None),
-                        )
-                    
+                        base_url=endpoint_info.url,
+                        timeout=aiohttp.ClientTimeout(total=None),
+                    )
+
                 elif endpoint_info.model_label in self.decode_model_labels:
                     if (
                         hasattr(self.app.state, "decode_client")
@@ -830,9 +830,9 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
                     ):
                         await self.app.state.decode_client.close()
                     self.app.state.decode_client = aiohttp.ClientSession(
-                            base_url=endpoint_info.url,
-                            timeout=aiohttp.ClientTimeout(total=None),
-                        )
+                        base_url=endpoint_info.url,
+                        timeout=aiohttp.ClientTimeout(total=None),
+                    )
 
     def has_ever_seen_model(self, model_name: str) -> bool:
         """Check if we've ever seen this model, even if currently scaled to zero."""
