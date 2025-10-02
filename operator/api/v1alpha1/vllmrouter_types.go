@@ -52,7 +52,7 @@ type VLLMRouterSpec struct {
 	StaticModels string `json:"staticModels,omitempty"`
 
 	// RoutingLogic specifies the routing strategy
-	// +kubebuilder:validation:Enum=roundrobin;session
+	// +kubebuilder:validation:Enum=roundrobin;session;kvaware;prefixaware;disaggregated_prefill
 	// +kubebuilder:default=roundrobin
 	RoutingLogic string `json:"routingLogic,omitempty"`
 

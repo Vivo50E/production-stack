@@ -724,10 +724,17 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
             self.known_models.update(model_names)
 
         try:
-            fut = asyncio.run_coroutine_threadsafe(
-                self.initialize_client_sessions(), self.app.state.event_loop
-            )
-            fut.result()
+            # Only initialize client sessions if event_loop is available
+            if hasattr(self.app.state, "event_loop") and self.app.state.event_loop:
+                fut = asyncio.run_coroutine_threadsafe(
+                    self.initialize_client_sessions(), self.app.state.event_loop
+                )
+                fut.result()
+            else:
+                # Event loop not ready yet, client sessions will be initialized in lifespan
+                logger.debug(
+                    "Event loop not ready, client sessions will be initialized later"
+                )
         except Exception as e:
             logger.error(f"Error initializing client sessions: {e}")
 
@@ -1171,10 +1178,17 @@ class K8sServiceNameServiceDiscovery(ServiceDiscovery):
             self.available_engines[engine_name].model_info = model_info
 
         try:
-            fut = asyncio.run_coroutine_threadsafe(
-                self.initialize_client_sessions(), self.app.state.event_loop
-            )
-            fut.result()
+            # Only initialize client sessions if event_loop is available
+            if hasattr(self.app.state, "event_loop") and self.app.state.event_loop:
+                fut = asyncio.run_coroutine_threadsafe(
+                    self.initialize_client_sessions(), self.app.state.event_loop
+                )
+                fut.result()
+            else:
+                # Event loop not ready yet, client sessions will be initialized in lifespan
+                logger.debug(
+                    "Event loop not ready, client sessions will be initialized later"
+                )
         except Exception as e:
             logger.error(f"Error initializing client sessions: {e}")
 

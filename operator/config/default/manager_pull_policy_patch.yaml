@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: manager
-          image: xueey7/production-stack-operator:latest
+          imagePullPolicy: IfNotPresent

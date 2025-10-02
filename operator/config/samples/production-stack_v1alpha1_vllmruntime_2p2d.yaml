@@ -1,0 +1,221 @@
+apiVersion: production-stack.vllm.ai/v1alpha1
+kind: VLLMRuntime
+metadata:
+  labels:
+    app.kubernetes.io/name: production-stack
+    app.kubernetes.io/managed-by: kustomize
+    model: Llama-3.2-3B-Instruct
+  name: vllmruntime-pd-sample
+spec:
+  # Enable PD (Prefill-Decode) disaggregation
+  # This configuration has been tested and verified to work
+  # Key fixes applied:
+  # - Updated to Llama-3.2-3B-Instruct (smaller, more stable)
+  # - Disabled Nixl/Xpyd to avoid remote_url conflicts
+  # - Fixed numeric format for buffer sizes
+  # - Reduced resource requirements for stability
+  # - Added proper model caching environment variables
+  enablePDDisaggregation: true
+  
+  # Topology configuration for PD disaggregation
+  topology:
+    # Prefill node configuration
+    prefill:
+      # Model configuration
+      model:
+        modelURL: "meta-llama/Llama-3.2-3B-Instruct"
+        enableLoRA: true
+        enableTool: false
+        toolCallParser: ""
+        maxModelLen: 4096
+        dtype: "bfloat16"
+        maxNumSeqs: 32
+        # HuggingFace token secret (optional)
+        hfTokenSecret:
+          name: "huggingface-token"
+        hfTokenName: "token"
+      
+      # vLLM server configuration
+      vllmConfig:
+        enableChunkedPrefill: false
+        enablePrefixCaching: false
+        tensorParallelSize: 1
+        gpuMemoryUtilization: "0.8"
+        maxLoras: 4
+        extraArgs: ["--disable-log-requests"]
+        v1: true
+        port: 8000
+        # Environment variables for model caching
+        env:
+          - name: HF_HOME
+            value: "/data"
+          - name: TRANSFORMERS_CACHE
+            value: "/data/transformers_cache"
+          - name: HF_HUB_CACHE
+            value: "/data/hf_hub_cache"
+          - name: PYTORCH_CUDA_ALLOC_CONF
+            value: "expandable_segments:True"
+          - name: VLLM_CPU_KVCACHE_SPACE
+            value: "0"
+          - name: CUDA_LAUNCH_BLOCKING
+            value: "0"
+          - name: NVIDIA_DRIVER_CAPABILITIES
+            value: "all"
+      
+      # LM Cache configuration for prefill
+      lmCacheConfig:
+        enabled: true
+        kvRole: "kv_producer"
+        localCpu: ""
+        maxLocalCpuSize: 0
+        enableNixl: true
+        enableXpyd: true
+        nixlRole: "sender"
+        nixlProxyHost: "vllm-router-service"
+        nixlProxyPort: "7500"
+        nixlBufferSize: "58720256"
+        nixlBufferDevice: "cuda"
+        rpcPort: "producer1"
+        cpuOffloadingBufferSize: ""
+        diskOffloadingBufferSize: "0"
+        remoteUrl: ""
+        remoteSerde: "naive"
+      
+      # Storage configuration
+      storageConfig:
+        enabled: true
+        storageClassName: ""
+        size: "10Gi"
+        accessMode: "ReadWriteMany"
+        mountPath: "/data"
+      
+      # Deployment configuration
+      deploymentConfig:
+        replicas: 2
+        deploymentStrategy: "Recreate"
+        # Resource requirements
+        resources:
+          cpu: "2"
+          memory: "16Gi"
+          gpu: "1"
+        # Image configuration
+        image:
+          registry: "docker.io"
+          name: "lmcache/vllm-openai:latest-nightly"
+          pullPolicy: "IfNotPresent"
+          pullSecretName: ""
+        # Sidecar configuration
+        sidecarConfig:
+          enabled: true
+          name: "sidecar"
+          image:
+            registry: "docker.io"
+            name: "lmcache/lmstack-sidecar:latest"
+            pullPolicy: "Always"
+          resources:
+            cpu: "0.5"
+            memory: "128Mi"
+          mountPath: "/data"
+
+    # Decode node configuration
+    decode:
+      # Model configuration (should match prefill)
+      model:
+        modelURL: "meta-llama/Llama-3.2-3B-Instruct"
+        enableLoRA: true
+        enableTool: false
+        toolCallParser: ""
+        maxModelLen: 4096
+        dtype: "bfloat16"
+        maxNumSeqs: 32
+        # HuggingFace token secret (optional)
+        hfTokenSecret:
+          name: "huggingface-token"
+        hfTokenName: "token"
+      
+      # vLLM server configuration
+      vllmConfig:
+        enableChunkedPrefill: false
+        enablePrefixCaching: false
+        tensorParallelSize: 1
+        gpuMemoryUtilization: "0.8"
+        maxLoras: 4
+        extraArgs: ["--disable-log-requests"]
+        v1: true
+        port: 8000
+        # Environment variables for model caching
+        env:
+          - name: HF_HOME
+            value: "/data"
+          - name: TRANSFORMERS_CACHE
+            value: "/data/transformers_cache"
+          - name: HF_HUB_CACHE
+            value: "/data/hf_hub_cache"
+          - name: PYTORCH_CUDA_ALLOC_CONF
+            value: "expandable_segments:True"
+          - name: VLLM_CPU_KVCACHE_SPACE
+            value: "0"
+          - name: CUDA_LAUNCH_BLOCKING
+            value: "0"
+          - name: NVIDIA_DRIVER_CAPABILITIES
+            value: "all"
+      
+      # LM Cache configuration for decode
+      lmCacheConfig:
+        enabled: true
+        kvRole: "kv_consumer"
+        localCpu: ""
+        maxLocalCpuSize: 0
+        enableNixl: true
+        enableXpyd: true
+        nixlRole: "receiver"
+        nixlPeerHost: "0.0.0.0"
+        nixlPeerInitPort: "7300"
+        nixlPeerAllocPort: "7400"
+        nixlBufferSize: "58720256"
+        nixlBufferDevice: "cuda"
+        rpcPort: "consumer1"
+        skipLastNTokens: 1
+        cpuOffloadingBufferSize: ""
+        diskOffloadingBufferSize: "0"
+        remoteUrl: ""
+        remoteSerde: "naive"
+      
+      # Storage configuration
+      storageConfig:
+        enabled: true
+        storageClassName: ""
+        size: "10Gi"
+        accessMode: "ReadWriteMany"
+        mountPath: "/data"
+      
+      # Deployment configuration
+      deploymentConfig:
+        replicas: 2
+        deploymentStrategy: "Recreate"
+        # Resource requirements
+        resources:
+          cpu: "2"
+          memory: "16Gi"
+          gpu: "1"
+        # Image configuration
+        image:
+          registry: "docker.io"
+          name: "lmcache/vllm-openai:latest-nightly"
+          pullPolicy: "IfNotPresent"
+          pullSecretName: ""
+        # Sidecar configuration
+        sidecarConfig:
+          enabled: true
+          name: "sidecar"
+          image:
+            registry: "docker.io"
+            name: "lmcache/lmstack-sidecar:latest"
+            pullPolicy: "Always"
+          resources:
+            cpu: "0.5"
+            memory: "128Mi"
+          mountPath: "/data"
+
+
+
