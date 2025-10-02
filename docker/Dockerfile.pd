@@ -22,7 +22,7 @@ ENV INSTALL_OPTIONAL_DEP=${INSTALL_OPTIONAL_DEP}
 RUN . /opt/venv/bin/activate && \
     uv pip install --upgrade --no-cache-dir pip setuptools_scm && \
     uv pip install --no-cache-dir . && \
-    uv pip install zmq msgspec
+    uv pip install zmq msgspec httpx
 
 # Set the entrypoint
 ENTRYPOINT ["/opt/venv/bin/vllm-router"]

@@ -89,14 +89,16 @@ logger = logging.getLogger("uvicorn")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.aiohttp_client_wrapper.start()
+
+    # Set event_loop early so it's available for service discovery
+    app.state.event_loop = asyncio.get_event_loop()
+
     if hasattr(app.state, "batch_processor"):
         await app.state.batch_processor.initialize()
 
     service_discovery = get_service_discovery()
     if hasattr(service_discovery, "initialize_client_sessions"):
         await service_discovery.initialize_client_sessions()
-
-    app.state.event_loop = asyncio.get_event_loop()
 
     # only start the ZMQ task if the routing logic is RoutingLogic.DISAGGREGATED_PREFILL
     if isinstance(app.state.router, DisaggregatedPrefillRouter):
@@ -186,8 +188,16 @@ def initialize_all(app: FastAPI, args):
             namespace=args.k8s_namespace,
             port=args.k8s_port,
             label_selector=args.k8s_label_selector,
-            prefill_model_labels=args.prefill_model_labels,
-            decode_model_labels=args.decode_model_labels,
+            prefill_model_labels=(
+                parse_comma_separated_args(args.prefill_model_labels)
+                if args.prefill_model_labels
+                else None
+            ),
+            decode_model_labels=(
+                parse_comma_separated_args(args.decode_model_labels)
+                if args.decode_model_labels
+                else None
+            ),
             watcher_timeout_seconds=args.k8s_watcher_timeout_seconds,
             health_check_timeout_seconds=args.backend_health_check_timeout_seconds,
         )

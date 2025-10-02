@@ -192,6 +192,9 @@ spec:
                 enum:
                 - roundrobin
                 - session
+                - kvaware
+                - prefixaware
+                - disaggregated_prefill
                 type: string
               serviceAccountName:
                 description: ServiceAccountName for the router pod

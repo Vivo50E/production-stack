@@ -1,0 +1,102 @@
+apiVersion: ai.your.org/v1alpha1
+kind: LLMInference
+metadata:
+  name: llama3-70b-pd
+spec:
+  model:
+    name: meta-llama/Meta-Llama-3-70B
+    version: "v0.3.2"
+    source:
+      repo: oci://registry.example.com/models/llama3-70b
+      path: weights/
+      authSecretRef: model-regcred
+    tokenizer:
+      name: meta-llama/Meta-Llama-3-70B
+    quantization:
+      dtype: bf16
+      kvPrecision: fp16
+      tensorParallel: 4
+      pipelineParallel: 1
+  topology:
+    prefill:
+      replicas: 2
+      shard: 2
+      gpuType: "nvidia.com/gpu.product=H100-80GB"
+      nodeSelector:
+        node.kubernetes.io/instance-type: "gpu.h100"
+      resources:
+        cpu: "8"
+        memory: "32Gi"
+        gpu: 4
+      batchPolicy:
+        maxBatchSize: 16
+        maxBatchDelayMs: 8
+        scheduler: fair
+    decode:
+      replicas: 6
+      shard: 3
+      gpuType: "nvidia.com/gpu.product=L40S"
+      nodeSelector:
+        node.kubernetes.io/instance-type: "gpu.l40s"
+      resources:
+        cpu: "6"
+        memory: "24Gi"
+        gpu: 1
+      decodePolicy:
+        maxConcurrentSequences: 2048
+        targetTokenLatencyMs: 60
+  kv:
+    layout: paged
+    transport: rdma
+    compression: fp8
+    retentionMs: 120000
+    spillToSSD:
+      enabled: true
+      size: 300Gi
+  routing:
+    enableGateway: true
+    serviceType: LoadBalancer
+    stickyPolicy:
+      mode: session
+      timeoutSeconds: 900
+    canary:
+      enabled: false
+  autoscaling:
+    prefill:
+      minReplicas: 2
+      maxReplicas: 10
+      metrics:
+        - type: Pods
+          pods:
+            metric:
+              name: prefill_queue_length
+            target:
+              type: AverageValue
+              averageValue: "20"
+    decode:
+      minReplicas: 6
+      maxReplicas: 60
+      targetP95TokenLatencyMs: 70
+      metrics:
+        - type: Pods
+          pods:
+            metric:
+              name: decode_tokens_per_second
+            target:
+              type: AverageValue
+              averageValue: "150"
+  rollout:
+    strategy: Canary
+    canary:
+      maxSurge: "25%"
+      maxUnavailable: "0%"
+      successCriteria:
+        - "decode.p95_latency<=70ms"
+        - "reject_rate<=1.0%"
+  observability:
+    prometheus:
+      scrape: true
+      port: 9091
+    opentelemetry:
+      endpoint: "otel-collector.observability.svc:4317"
+      sampling: 0.2

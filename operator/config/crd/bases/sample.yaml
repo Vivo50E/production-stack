@@ -1,0 +1,451 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: llminferences.ai.your.org
+spec:
+  group: ai.your.org
+  scope: Namespaced
+  names:
+    kind: LLMInference
+    plural: llminferences
+    singular: llminference
+    shortNames:
+      - llmi
+    categories:
+      - ai
+      - inference
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Model
+          type: string
+          jsonPath: .spec.model.name
+        - name: Version
+          type: string
+          jsonPath: .spec.model.version
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+        - name: Prefill
+          type: string
+          jsonPath: .status.summary.prefillReplicasReady
+        - name: Decode
+          type: string
+          jsonPath: .status.summary.decodeReplicasReady
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required: [model, topology]
+              properties:
+                model:
+                  type: object
+                  description: 模型与权重配置
+                  required: [name, version]
+                  properties:
+                    name:
+                      type: string
+                      description: 模型标识，如 meta-llama/Meta-Llama-3-70B
+                    version:
+                      type: string
+                      description: 内部版本或权重tag/commit
+                    source:
+                      type: object
+                      description: 权重来源配置
+                      properties:
+                        repo:
+                          type: string
+                          description: 镜像/权重仓库URL或OCI Artifact
+                        path:
+                          type: string
+                          description: 权重相对路径/子目录
+                        authSecretRef:
+                          type: string
+                          description: 凭据Secret名称（可选）
+                    tokenizer:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        extraOptions:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                    quantization:
+                      type: object
+                      properties:
+                        dtype:
+                          type: string
+                          default: "fp16"
+                          enum: ["fp32","fp16","bf16","fp8","int8","int4"]
+                        kvPrecision:
+                          type: string
+                          default: "fp16"
+                          enum: ["fp16","bf16","fp8","int8"]
+                        tensorParallel:
+                          type: integer
+                          minimum: 1
+                          default: 1
+                        pipelineParallel:
+                          type: integer
+                          minimum: 1
+                          default: 1
+                topology:
+                  type: object
+                  description: PD 分离拓扑
+                  required: [prefill, decode]
+                  properties:
+                    prefill:
+                      type: object
+                      required: [replicas, resources]
+                      properties:
+                        replicas:
+                          type: integer
+                          minimum: 0
+                          default: 1
+                        shard:
+                          type: integer
+                          minimum: 1
+                          default: 1
+                        gpuType:
+                          type: string
+                          description: 目标GPU类型标签，如 nvidia.com/gpu.product=H100
+                        nodeSelector:
+                          type: object
+                          additionalProperties:
+                            type: string
+                        tolerations:
+                          type: array
+                          items:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                        affinity:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        resources:
+                          type: object
+                          description: K8s 容器资源请求/上限
+                          properties:
+                            cpu:
+                              type: string
+                            memory:
+                              type: string
+                            gpu:
+                              type: integer
+                              minimum: 0
+                            gpuMemory:
+                              type: string
+                        env:
+                          type: array
+                          items:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                        annotations:
+                          type: object
+                          additionalProperties:
+                            type: string
+                        podDisruptionBudget:
+                          type: object
+                          properties:
+                            minAvailable:
+                              type: string
+                            maxUnavailable:
+                              type: string
+                        batchPolicy:
+                          type: object
+                          description: prefill 批处理策略
+                          properties:
+                            maxBatchSize:
+                              type: integer
+                              minimum: 1
+                              default: 8
+                            maxBatchDelayMs:
+                              type: integer
+                              minimum: 0
+                              default: 5
+                            scheduler:
+                              type: string
+                              enum: ["fair","sjf","fcfs"]
+                              default: "fair"
+                    decode:
+                      type: object
+                      required: [replicas, resources]
+                      properties:
+                        replicas:
+                          type: integer
+                          minimum: 0
+                          default: 2
+                        shard:
+                          type: integer
+                          minimum: 1
+                          default: 1
+                        gpuType:
+                          type: string
+                        nodeSelector:
+                          type: object
+                          additionalProperties:
+                            type: string
+                        tolerations:
+                          type: array
+                          items:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                        affinity:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        resources:
+                          type: object
+                          properties:
+                            cpu:
+                              type: string
+                            memory:
+                              type: string
+                            gpu:
+                              type: integer
+                              minimum: 0
+                            gpuMemory:
+                              type: string
+                        env:
+                          type: array
+                          items:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                        annotations:
+                          type: object
+                          additionalProperties:
+                            type: string
+                        podDisruptionBudget:
+                          type: object
+                          properties:
+                            minAvailable:
+                              type: string
+                            maxUnavailable:
+                              type: string
+                        decodePolicy:
+                          type: object
+                          properties:
+                            maxConcurrentSequences:
+                              type: integer
+                              minimum: 1
+                              default: 1024
+                            targetTokenLatencyMs:
+                              type: integer
+                              minimum: 1
+                              default: 50
+                            maxNewTokensPerStep:
+                              type: integer
+                              minimum: 1
+                              default: 1
+                kv:
+                  type: object
+                  description: KV 缓存布局与传输
+                  properties:
+                    layout:
+                      type: string
+                      enum: ["paged","contiguous"]
+                      default: "paged"
+                    transport:
+                      type: string
+                      enum: ["local","rdma","tcp"]
+                      default: "local"
+                    compression:
+                      type: string
+                      enum: ["none","fp8","int8","custom"]
+                      default: "none"
+                    retentionMs:
+                      type: integer
+                      minimum: 0
+                      default: 60000
+                    spillToSSD:
+                      type: object
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                        size:
+                          type: string
+                          description: 本地空穴/SSD缓存配额，如 200Gi
+                routing:
+                  type: object
+                  description: 网关与路由/粘性策略
+                  properties:
+                    enableGateway:
+                      type: boolean
+                      default: true
+                    serviceType:
+                      type: string
+                      enum: ["ClusterIP","NodePort","LoadBalancer"]
+                      default: "ClusterIP"
+                    stickyPolicy:
+                      type: object
+                      properties:
+                        mode:
+                          type: string
+                          enum: ["session","hash","none"]
+                          default: "session"
+                        timeoutSeconds:
+                          type: integer
+                          minimum: 1
+                          default: 600
+                    canary:
+                      type: object
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                        trafficPercent:
+                          type: integer
+                          minimum: 0
+                          maximum: 100
+                          default: 5
+                autoscaling:
+                  type: object
+                  description: 联动伸缩策略
+                  properties:
+                    prefill:
+                      type: object
+                      properties:
+                        minReplicas:
+                          type: integer
+                          minimum: 0
+                          default: 1
+                        maxReplicas:
+                          type: integer
+                          minimum: 1
+                          default: 10
+                        metrics:
+                          type: array
+                          description: HPA 兼容的指标或自定义指标
+                          items:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                        scaleUpPolicy:
+                          type: object
+                          properties:
+                            stabilizationWindowSeconds:
+                              type: integer
+                              default: 30
+                        scaleDownPolicy:
+                          type: object
+                          properties:
+                            stabilizationWindowSeconds:
+                              type: integer
+                              default: 120
+                    decode:
+                      type: object
+                      properties:
+                        minReplicas:
+                          type: integer
+                          minimum: 0
+                          default: 2
+                        maxReplicas:
+                          type: integer
+                          minimum: 1
+                          default: 50
+                        metrics:
+                          type: array
+                          items:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                        targetP95TokenLatencyMs:
+                          type: integer
+                          minimum: 1
+                          default: 80
+                rollout:
+                  type: object
+                  description: 发布与回滚门控
+                  properties:
+                    strategy:
+                      type: string
+                      enum: ["RollingUpdate","BlueGreen","Canary"]
+                      default: "RollingUpdate"
+                    canary:
+                      type: object
+                      properties:
+                        maxSurge:
+                          type: string
+                          default: "25%"
+                        maxUnavailable:
+                          type: string
+                          default: "0%"
+                        successCriteria:
+                          type: array
+                          items:
+                            type: string
+                          default:
+                            - "decode.p95_latency<=80ms"
+                            - "reject_rate<=1%"
+                observability:
+                  type: object
+                  properties:
+                    prometheus:
+                      type: object
+                      properties:
+                        scrape:
+                          type: boolean
+                          default: true
+                        port:
+                          type: integer
+                          default: 9090
+                    opentelemetry:
+                      type: object
+                      properties:
+                        endpoint:
+                          type: string
+                        sampling:
+                          type: number
+                          minimum: 0
+                          maximum: 1
+                          default: 0.1
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending","Reconciling","Ready","Degraded","Failed"]
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: ["type","status","lastTransitionTime"]
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ["True","False","Unknown"]
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                summary:
+                  type: object
+                  properties:
+                    prefillReplicasReady:
+                      type: integer
+                    decodeReplicasReady:
+                      type: integer
+                    modelReady:
+                      type: boolean
+                metrics:
+                  type: object
+                  description: 可选聚合指标快照
+                  x-kubernetes-preserve-unknown-fields: true
