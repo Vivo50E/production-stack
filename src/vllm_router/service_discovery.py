@@ -817,12 +817,15 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
         Initialize httpx AsyncClient objects for prefill and decode endpoints.
         This must be called from an async context during app startup.
         """
+        logger.info(f"initialize_client_sessions called. prefill_model_labels={self.prefill_model_labels}, decode_model_labels={self.decode_model_labels}")
         if (
             self.prefill_model_labels is not None
             and self.decode_model_labels is not None
         ):
             endpoint_infos = self.get_endpoint_info()
+            logger.info(f"Got {len(endpoint_infos)} endpoints")
             for endpoint_info in endpoint_infos:
+                logger.info(f"Checking endpoint: url={endpoint_info.url}, model_label={endpoint_info.model_label}")
                 if endpoint_info.model_label in self.prefill_model_labels:
                     if (
                         hasattr(self.app.state, "prefill_client")
@@ -833,6 +836,7 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
                         base_url=endpoint_info.url,
                         timeout=aiohttp.ClientTimeout(total=None),
                     )
+                    logger.info(f"Created prefill_client for {endpoint_info.url} with timeout=None")
 
                 elif endpoint_info.model_label in self.decode_model_labels:
                     if (
@@ -844,6 +848,9 @@ class K8sPodIPServiceDiscovery(ServiceDiscovery):
                         base_url=endpoint_info.url,
                         timeout=aiohttp.ClientTimeout(total=None),
                     )
+                    logger.info(f"Created decode_client for {endpoint_info.url} with timeout=None")
+        else:
+            logger.warning("prefill_model_labels or decode_model_labels is None, skipping client session initialization")
 
     def has_ever_seen_model(self, model_name: str) -> bool:
         """Check if we've ever seen this model, even if currently scaled to zero."""
@@ -1270,12 +1277,15 @@ class K8sServiceNameServiceDiscovery(ServiceDiscovery):
         Initialize httpx AsyncClient objects for prefill and decode endpoints.
         This must be called from an async context during app startup.
         """
+        logger.info(f"K8sServiceNameServiceDiscovery.initialize_client_sessions called. prefill_model_labels={self.prefill_model_labels}, decode_model_labels={self.decode_model_labels}")
         if (
             self.prefill_model_labels is not None
             and self.decode_model_labels is not None
         ):
             endpoint_infos = self.get_endpoint_info()
+            logger.info(f"Got {len(endpoint_infos)} endpoints")
             for endpoint_info in endpoint_infos:
+                logger.info(f"Checking endpoint: url={endpoint_info.url}, model_label={endpoint_info.model_label}")
                 if endpoint_info.model_label in self.prefill_model_labels:
                     # Use httpx AsyncClient instead of aiohttp
                     import httpx
@@ -1284,6 +1294,7 @@ class K8sServiceNameServiceDiscovery(ServiceDiscovery):
                         base_url=endpoint_info.url,
                         timeout=None,
                     )
+                    logger.info(f"Created prefill_client for {endpoint_info.url} with timeout=None")
                 elif endpoint_info.model_label in self.decode_model_labels:
                     # Use httpx AsyncClient instead of aiohttp
                     import httpx
@@ -1292,6 +1303,9 @@ class K8sServiceNameServiceDiscovery(ServiceDiscovery):
                         base_url=endpoint_info.url,
                         timeout=None,
                     )
+                    logger.info(f"Created decode_client for {endpoint_info.url} with timeout=None")
+        else:
+            logger.warning("K8sServiceNameServiceDiscovery: prefill_model_labels or decode_model_labels is None, skipping client session initialization")
 
 
 def _create_service_discovery(

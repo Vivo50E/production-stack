@@ -322,12 +322,7 @@ func (r *VLLMRouterReconciler) deploymentForVLLMRouter(router *servingv1alpha1.V
 							ImagePullPolicy: imagePullPolicy,
 							Args:            args,
 							Env:             env,
-							Ports: []corev1.ContainerPort{
-								{
-									Name:          "http",
-									ContainerPort: router.Spec.Port,
-								},
-							},
+					Ports: r.buildRouterContainerPorts(router),
 							Resources: resources,
 							LivenessProbe: &corev1.Probe{
 								InitialDelaySeconds: 30,
@@ -421,6 +416,39 @@ func (r *VLLMRouterReconciler) serviceForVLLMRouter(router *servingv1alpha1.VLLM
 		labels[k] = v
 	}
 
+	ports := []corev1.ServicePort{
+		{
+			Name:       "http",
+			Port:       80,
+			TargetPort: intstr.FromInt32(router.Spec.Port),
+			Protocol:   corev1.ProtocolTCP,
+		},
+	}
+
+	// Add Nixl ports for disaggregated_prefill routing
+	if router.Spec.RoutingLogic == "disaggregated_prefill" {
+		ports = append(ports,
+			corev1.ServicePort{
+				Name:       "nixl-proxy",
+				Port:       7500,
+				TargetPort: intstr.FromInt(7500),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			corev1.ServicePort{
+				Name:       "nixl-peer-init",
+				Port:       7300,
+				TargetPort: intstr.FromInt(7300),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			corev1.ServicePort{
+				Name:       "nixl-peer-alloc",
+				Port:       7400,
+				TargetPort: intstr.FromInt(7400),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		)
+	}
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      router.Name,
@@ -429,14 +457,7 @@ func (r *VLLMRouterReconciler) serviceForVLLMRouter(router *servingv1alpha1.VLLM
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
 			Selector: labels,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "http",
-					Port:       80,
-					TargetPort: intstr.FromInt32(router.Spec.Port),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
+			Ports:    ports,
 		},
 	}
 
@@ -510,6 +531,36 @@ func (r *VLLMRouterReconciler) roleBindingForVLLMRouter(router *servingv1alpha1.
 	}
 	ctrl.SetControllerReference(router, roleBinding, r.Scheme)
 	return roleBinding
+}
+
+// buildRouterContainerPorts builds the container ports for the router
+func (r *VLLMRouterReconciler) buildRouterContainerPorts(router *servingv1alpha1.VLLMRouter) []corev1.ContainerPort {
+	ports := []corev1.ContainerPort{
+		{
+			Name:          "http",
+			ContainerPort: router.Spec.Port,
+		},
+	}
+
+	// Add Nixl ports for disaggregated_prefill routing
+	if router.Spec.RoutingLogic == "disaggregated_prefill" {
+		ports = append(ports,
+			corev1.ContainerPort{
+				Name:          "nixl-proxy",
+				ContainerPort: 7500,
+			},
+			corev1.ContainerPort{
+				Name:          "nixl-peer-init",
+				ContainerPort: 7300,
+			},
+			corev1.ContainerPort{
+				Name:          "nixl-peer-alloc",
+				ContainerPort: 7400,
+			},
+		)
+	}
+
+	return ports
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -76,6 +76,13 @@ async def route_chat_completion(request: Request, background_tasks: BackgroundTa
 
 @main_router.post("/v1/completions")
 async def route_completion(request: Request, background_tasks: BackgroundTasks):
+    from vllm_router.routers.routing_logic import DisaggregatedPrefillRouter
+
+    if isinstance(request.app.state.router, DisaggregatedPrefillRouter):
+        return await route_disaggregated_prefill_request(
+            request, "/v1/completions", background_tasks
+        )
+    
     return await route_general_request(request, "/v1/completions", background_tasks)
 
 

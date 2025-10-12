@@ -1464,6 +1464,9 @@ func (r *VLLMRuntimeReconciler) buildEnvironmentVariablesForNode(nodeConfig *pro
 			env = append(env, corev1.EnvVar{Name: "LMCACHE_MAX_LOCAL_CPU_SIZE", Value: fmt.Sprintf("%d", nodeConfig.LMCacheConfig.MaxLocalCPUSize)})
 		}
 
+	// Only set LMCACHE_LOCAL_DISK if Nixl is not enabled
+	// Nixl requires local_disk to be None (unset), not False
+	if !nodeConfig.LMCacheConfig.EnableNixl {
 		if nodeConfig.LMCacheConfig.DiskOffloadingBufferSize != "" {
 			env = append(env,
 				corev1.EnvVar{Name: "LMCACHE_LOCAL_DISK", Value: "True"},
@@ -1472,6 +1475,7 @@ func (r *VLLMRuntimeReconciler) buildEnvironmentVariablesForNode(nodeConfig *pro
 		} else {
 			env = append(env, corev1.EnvVar{Name: "LMCACHE_LOCAL_DISK", Value: "False"})
 		}
+	}
 
 		if nodeConfig.LMCacheConfig.RemoteURL != "" {
 			env = append(env,
@@ -1480,28 +1484,48 @@ func (r *VLLMRuntimeReconciler) buildEnvironmentVariablesForNode(nodeConfig *pro
 			)
 		}
 
-		// Nixl configuration
+		// Nixl/PD configuration
+		// Note: LMCache 0.3.8+ uses LMCACHE_ENABLE_PD and LMCACHE_PD_* variables
+		// We set both old (NIXL) and new (PD) names for compatibility
 		if nodeConfig.LMCacheConfig.EnableNixl {
+			// Enable PD disaggregation (new naming)
+			env = append(env, corev1.EnvVar{Name: "LMCACHE_ENABLE_PD", Value: "True"})
+			// Also set old naming for backward compatibility
 			env = append(env, corev1.EnvVar{Name: "LMCACHE_ENABLE_NIXL", Value: "True"})
+			
+			// Set transfer channel to nixl (required in LMCache 0.3.8+)
+			env = append(env, corev1.EnvVar{Name: "LMCACHE_TRANSFER_CHANNEL", Value: "nixl"})
+			env = append(env, corev1.EnvVar{Name: "LMCACHE_PD_TRANSFER_CHANNEL", Value: "nixl"})
 
 			if nodeConfig.LMCacheConfig.NixlRole != "" {
+				// New naming: pd_role
+				env = append(env, corev1.EnvVar{Name: "LMCACHE_PD_ROLE", Value: nodeConfig.LMCacheConfig.NixlRole})
+				// Old naming
 				env = append(env, corev1.EnvVar{Name: "LMCACHE_NIXL_ROLE", Value: nodeConfig.LMCacheConfig.NixlRole})
 			}
 
 			if nodeConfig.LMCacheConfig.NixlBufferSize != "" {
+				// New naming: pd_buffer_size
+				env = append(env, corev1.EnvVar{Name: "LMCACHE_PD_BUFFER_SIZE", Value: nodeConfig.LMCacheConfig.NixlBufferSize})
 				env = append(env, corev1.EnvVar{Name: "LMCACHE_NIXL_BUFFER_SIZE", Value: nodeConfig.LMCacheConfig.NixlBufferSize})
 			}
 
 			if nodeConfig.LMCacheConfig.NixlBufferDevice != "" {
+				// New naming: pd_buffer_device
+				env = append(env, corev1.EnvVar{Name: "LMCACHE_PD_BUFFER_DEVICE", Value: nodeConfig.LMCacheConfig.NixlBufferDevice})
 				env = append(env, corev1.EnvVar{Name: "LMCACHE_NIXL_BUFFER_DEVICE", Value: nodeConfig.LMCacheConfig.NixlBufferDevice})
 			}
 
 			// Prefill-specific Nixl config
 			if nodeType == "prefill" {
 				if nodeConfig.LMCacheConfig.NixlProxyHost != "" {
+					// New naming: pd_proxy_host
+					env = append(env, corev1.EnvVar{Name: "LMCACHE_PD_PROXY_HOST", Value: nodeConfig.LMCacheConfig.NixlProxyHost})
 					env = append(env, corev1.EnvVar{Name: "LMCACHE_NIXL_PROXY_HOST", Value: nodeConfig.LMCacheConfig.NixlProxyHost})
 				}
 				if nodeConfig.LMCacheConfig.NixlProxyPort != "" {
+					// New naming: pd_proxy_port
+					env = append(env, corev1.EnvVar{Name: "LMCACHE_PD_PROXY_PORT", Value: nodeConfig.LMCacheConfig.NixlProxyPort})
 					env = append(env, corev1.EnvVar{Name: "LMCACHE_NIXL_PROXY_PORT", Value: nodeConfig.LMCacheConfig.NixlProxyPort})
 				}
 			}
@@ -1509,16 +1533,23 @@ func (r *VLLMRuntimeReconciler) buildEnvironmentVariablesForNode(nodeConfig *pro
 			// Decode-specific Nixl config
 			if nodeType == "decode" {
 				if nodeConfig.LMCacheConfig.NixlPeerHost != "" {
+					// New naming: pd_peer_host
+					env = append(env, corev1.EnvVar{Name: "LMCACHE_PD_PEER_HOST", Value: nodeConfig.LMCacheConfig.NixlPeerHost})
 					env = append(env, corev1.EnvVar{Name: "LMCACHE_NIXL_PEER_HOST", Value: nodeConfig.LMCacheConfig.NixlPeerHost})
 				}
 				if nodeConfig.LMCacheConfig.NixlPeerInitPort != "" {
+					// New naming: pd_peer_init_port
+					env = append(env, corev1.EnvVar{Name: "LMCACHE_PD_PEER_INIT_PORT", Value: nodeConfig.LMCacheConfig.NixlPeerInitPort})
 					env = append(env, corev1.EnvVar{Name: "LMCACHE_NIXL_PEER_INIT_PORT", Value: nodeConfig.LMCacheConfig.NixlPeerInitPort})
 				}
 				if nodeConfig.LMCacheConfig.NixlPeerAllocPort != "" {
+					// New naming: pd_peer_alloc_port
+					env = append(env, corev1.EnvVar{Name: "LMCACHE_PD_PEER_ALLOC_PORT", Value: nodeConfig.LMCacheConfig.NixlPeerAllocPort})
 					env = append(env, corev1.EnvVar{Name: "LMCACHE_NIXL_PEER_ALLOC_PORT", Value: nodeConfig.LMCacheConfig.NixlPeerAllocPort})
 				}
 			}
 		} else {
+			env = append(env, corev1.EnvVar{Name: "LMCACHE_ENABLE_PD", Value: "False"})
 			env = append(env, corev1.EnvVar{Name: "LMCACHE_ENABLE_NIXL", Value: "False"})
 		}
 

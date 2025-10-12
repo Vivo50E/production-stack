@@ -36,8 +36,8 @@ spec:
   # Image configuration
   image:
     registry: docker.io
-    name: xueey7/vllm-router:fix-pd-labels-v4
-    pullPolicy: IfNotPresent
+    name: lmcache/vllm-router:fix-receiver-host
+    pullPolicy: Never
 
   # Resource requirements
   resources:

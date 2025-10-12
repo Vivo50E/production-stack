@@ -471,31 +471,48 @@ async def route_disaggregated_prefill_request(
     orig_max_tokens = request_json.get("max_tokens", 0)
     stream_options = request_json.pop("stream_options", None)
 
-    # # Check if client sessions are initialized, if not, try to initialize them
-    # if not hasattr(request.app.state, 'prefill_client') or request.app.state.prefill_client is None:
-    #     logger.warning("prefill_client not initialized, attempting to initialize client sessions")
-    #     try:
-    #         from vllm_router.service_discovery import get_service_discovery
-    #         service_discovery = get_service_discovery()
-    #         if hasattr(service_discovery, '_reinitialize_client_sessions'):
-    #             logger.info("In route_disaggregated_prefill_request: Calling _reinitialize_client_sessions")
-    #             await service_discovery._reinitialize_client_sessions()
-    #             logger.info("Successfully initialized client sessions")
-    #         else:
-    #             logger.error("Service discovery does not have _reinitialize_client_sessions method")
-    #     except Exception as e:
-    #         logger.error(f"Failed to initialize client sessions: {e}")
-    #         return JSONResponse(
-    #             status_code=500,
-    #             content={
-    #                 "error": {
-    #                     "message": "Failed to initialize client sessions",
-    #                     "type": "initialization_error",
-    #                     "code": 500,
-    #                 }
-    #             },
-    #             headers={"X-Request-Id": request_id},
-    #         )
+    # Check if client sessions are initialized, if not, try to initialize them
+    if not hasattr(request.app.state, 'prefill_client') or request.app.state.prefill_client is None:
+        logger.warning("prefill_client not initialized, attempting to initialize client sessions")
+        try:
+            from vllm_router.service_discovery import get_service_discovery
+            service_discovery = get_service_discovery()
+            if hasattr(service_discovery, 'initialize_client_sessions'):
+                logger.info("In route_disaggregated_prefill_request: Calling initialize_client_sessions")
+                await service_discovery.initialize_client_sessions()
+                logger.info("Successfully initialized client sessions")
+            else:
+                logger.error("Service discovery does not have initialize_client_sessions method")
+        except Exception as e:
+            logger.error(f"Failed to initialize client sessions: {e}", exc_info=True)
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": {
+                        "message": f"Failed to initialize client sessions: {str(e)}",
+                        "type": "initialization_error",
+                        "code": 500,
+                    }
+                },
+                headers={"X-Request-Id": request_id},
+            )
+
+    # Final check
+    if not hasattr(request.app.state, 'prefill_client') or request.app.state.prefill_client is None:
+        logger.error("prefill_client still not available after initialization attempt")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "message": "Disaggregated prefill is not properly configured. prefill_client is not available.",
+                    "type": "configuration_error",
+                    "code": 500,
+                }
+            },
+            headers={"X-Request-Id": request_id},
+        )
+    
+    logger.info(f"Processing disaggregated prefill request {request_id} with max_tokens={orig_max_tokens}")
 
     st = time.time()
     try:
@@ -511,19 +528,22 @@ async def route_disaggregated_prefill_request(
         else:
             tokenize_payload = {"prompt": request_json["prompt"]}
 
+        logger.info(f"{request_id} Step 1: Sending tokenize request to prefill_client")
         tokenize_output = await send_request_to_tokenizer(
             request.app.state.prefill_client,
             "/tokenize",
             tokenize_payload,
             request_id,
         )
-        # tokenize_output {'count': 6, 'max_model_len': 2048, 'tokens': [2, 2264, 1248, 16, 452, 116], 'token_strs': None}
+        logger.info(f"{request_id} Tokenization completed. Token count: {tokenize_output.get('count', 'unknown')}")
 
         # Update request with tokenized prompt
         request_json["prompt"] = tokenize_output["tokens"]
         request_json["max_tokens"] = 1
 
         # Step 2: Create disagg_spec for KV transfer
+        logger.info(f"{request_id} Step 2: Creating disagg_spec for KV transfer")
+        
         # CRITICAL FIX: Get actual decode node IP instead of 0.0.0.0
         decode_base_url = request.app.state.decode_client._base_url if hasattr(request.app.state.decode_client, '_base_url') else str(request.app.state.decode_client.base_url)
         # Extract IP from URL like "http://10.244.0.120:8000"
@@ -554,6 +574,7 @@ async def route_disaggregated_prefill_request(
         request_json["stream"] = False
 
         # Step 3: Send to prefiller
+        logger.info(f"{request_id} Step 3: Sending request to prefiller at {request.app.state.prefill_client._base_url}")
         prefill_output = await send_request_to_prefiller(
             request.app.state.prefill_client,
             "/v1/completions",
@@ -561,7 +582,7 @@ async def route_disaggregated_prefill_request(
             request_id,
         )
         et = time.time()
-        logger.info(f"{request_id} prefill time (TTFT): {et - st:.4f}")
+        logger.info(f"{request_id} Prefill completed! prefill time (TTFT): {et - st:.4f}")
         logger.info(
             f"Routing request {request_id} with session id None to {request.app.state.prefill_client._base_url} at {et}, process time = {et - in_router_time:.4f}"
         )
@@ -574,21 +595,8 @@ async def route_disaggregated_prefill_request(
         if stream_options is not None:
             request_json["stream_options"] = stream_options
 
-    except aiohttp.ClientResponseError as e:
-        logger.error(f"HTTP error in prefiller: {e}", exc_info=True)
-        return JSONResponse(
-            status_code=e.status,
-            content={
-                "error": {
-                    "message": f"Prefiller error: {e.message}",
-                    "type": "prefiller_error",
-                    "code": e.status,
-                }
-            },
-            headers={"X-Request-Id": request_id},
-        )
     except Exception as e:
-        logger.error(f"Unexpected error in prefiller: {e}", exc_info=True)
+        logger.error(f"Error in prefiller stage: {type(e).__name__}: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={
