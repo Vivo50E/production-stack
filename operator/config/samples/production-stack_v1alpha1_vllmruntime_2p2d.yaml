@@ -4,30 +4,26 @@ metadata:
   labels:
     app.kubernetes.io/name: production-stack
     app.kubernetes.io/managed-by: kustomize
-    model: Llama-3.2-3B-Instruct
+    model: Llama-3.2-1B-Instruct
   name: vllmruntime-pd-sample
 spec:
   enablePDDisaggregation: true
   
-  # Topology configuration for PD disaggregation
   topology:
     # Prefill node configuration
     prefill:
-      # Model configuration
       model:
-        modelURL: "meta-llama/Llama-3.2-3B-Instruct"
+        modelURL: "meta-llama/Llama-3.2-1B-Instruct"
         enableLoRA: true
         enableTool: false
         toolCallParser: ""
         maxModelLen: 4096
         dtype: "bfloat16"
         maxNumSeqs: 32
-        # HuggingFace token secret (optional)
         hfTokenSecret:
           name: "huggingface-token"
         hfTokenName: "token"
       
-      # vLLM server configuration
       vllmConfig:
         enableChunkedPrefill: false
         enablePrefixCaching: false
@@ -37,7 +33,6 @@ spec:
         extraArgs: ["--disable-log-requests"]
         v1: true
         port: 8000
-        # Environment variables for model caching
         env:
           - name: HF_HOME
             value: "/data"
@@ -49,12 +44,9 @@ spec:
             value: "expandable_segments:True"
           - name: VLLM_CPU_KVCACHE_SPACE
             value: "0"
-          - name: CUDA_LAUNCH_BLOCKING
+          - name: PYTHONHASHSEED
             value: "0"
-          - name: NVIDIA_DRIVER_CAPABILITIES
-            value: "all"
       
-      # LM Cache configuration for prefill
       lmCacheConfig:
         enabled: true
         kvRole: "kv_producer"
@@ -73,30 +65,25 @@ spec:
         remoteUrl: ""
         remoteSerde: "naive"
       
-      # Storage configuration
       storageConfig:
         enabled: true
-        storageClassName: ""
+        storageClassName: "local-path"
         size: "10Gi"
-        accessMode: "ReadWriteMany"
+        accessMode: "ReadWriteOnce"
         mountPath: "/data"
       
-      # Deployment configuration
       deploymentConfig:
         replicas: 2
         deploymentStrategy: "Recreate"
-        # Resource requirements
         resources:
           cpu: "2"
           memory: "16Gi"
           gpu: "1"
-        # Image configuration
         image:
           registry: "docker.io"
-          name: "lmcache/vllm-openai:latest-nightly"
+          name: "lmcache/vllm-openai:v0.3.7"
           pullPolicy: "IfNotPresent"
           pullSecretName: ""
-        # Sidecar configuration
         sidecarConfig:
           enabled: true
           name: "sidecar"
@@ -111,21 +98,18 @@ spec:
 
     # Decode node configuration
     decode:
-      # Model configuration (should match prefill)
       model:
-        modelURL: "meta-llama/Llama-3.2-3B-Instruct"
+        modelURL: "meta-llama/Llama-3.2-1B-Instruct"
         enableLoRA: true
         enableTool: false
         toolCallParser: ""
         maxModelLen: 4096
         dtype: "bfloat16"
         maxNumSeqs: 32
-        # HuggingFace token secret (optional)
         hfTokenSecret:
           name: "huggingface-token"
         hfTokenName: "token"
       
-      # vLLM server configuration
       vllmConfig:
         enableChunkedPrefill: false
         enablePrefixCaching: false
@@ -135,7 +119,6 @@ spec:
         extraArgs: ["--disable-log-requests"]
         v1: true
         port: 8000
-        # Environment variables for model caching
         env:
           - name: HF_HOME
             value: "/data"
@@ -147,12 +130,9 @@ spec:
             value: "expandable_segments:True"
           - name: VLLM_CPU_KVCACHE_SPACE
             value: "0"
-          - name: CUDA_LAUNCH_BLOCKING
+          - name: PYTHONHASHSEED
             value: "0"
-          - name: NVIDIA_DRIVER_CAPABILITIES
-            value: "all"
       
-      # LM Cache configuration for decode
       lmCacheConfig:
         enabled: true
         kvRole: "kv_consumer"
@@ -173,30 +153,25 @@ spec:
         remoteUrl: ""
         remoteSerde: "naive"
       
-      # Storage configuration
       storageConfig:
         enabled: true
-        storageClassName: ""
+        storageClassName: "local-path"
         size: "10Gi"
-        accessMode: "ReadWriteMany"
+        accessMode: "ReadWriteOnce"
         mountPath: "/data"
       
-      # Deployment configuration
       deploymentConfig:
         replicas: 2
         deploymentStrategy: "Recreate"
-        # Resource requirements
         resources:
           cpu: "2"
           memory: "16Gi"
           gpu: "1"
-        # Image configuration
         image:
           registry: "docker.io"
-          name: "lmcache/vllm-openai:latest-nightly"
+          name: "lmcache/vllm-openai:v0.3.7"
           pullPolicy: "IfNotPresent"
           pullSecretName: ""
-        # Sidecar configuration
         sidecarConfig:
           enabled: true
           name: "sidecar"
@@ -208,6 +183,3 @@ spec:
             cpu: "0.5"
             memory: "128Mi"
           mountPath: "/data"
-
-
-

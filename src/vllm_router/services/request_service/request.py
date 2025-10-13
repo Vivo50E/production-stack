@@ -401,6 +401,9 @@ async def send_request_to_prefiller(
     client, endpoint: str, req_data: dict, request_id: str
 ):
     """Send a request to a prefiller service using aiohttp."""
+    from vllm_router.log import init_logger
+    logger = init_logger(__name__)
+    
     req_data = req_data.copy()
     req_data["max_tokens"] = 1
     if "max_completion_tokens" in req_data:
@@ -411,9 +414,26 @@ async def send_request_to_prefiller(
         "X-Request-Id": request_id,
     }
 
-    async with client.post(endpoint, json=req_data, headers=headers) as response:
-        response.raise_for_status()
-        return await response.json()
+    logger.info(f"{request_id} 🔍 About to call client.post('{endpoint}')")
+    logger.info(f"{request_id} Request data keys: {list(req_data.keys())}")
+    logger.info(f"{request_id} Client type: {type(client).__name__}")
+    logger.info(f"{request_id} Client base_url: {getattr(client, '_base_url', 'N/A')}")
+    
+    import time
+    start = time.time()
+    try:
+        logger.info(f"{request_id} ⏱️  Entering async with client.post()...")
+        async with client.post(endpoint, json=req_data, headers=headers) as response:
+            elapsed = time.time() - start
+            logger.info(f"{request_id} ✅ client.post() returned after {elapsed:.2f}s, status={response.status}")
+            response.raise_for_status()
+            result = await response.json()
+            logger.info(f"{request_id} ✅ response.json() completed")
+            return result
+    except Exception as e:
+        elapsed = time.time() - start
+        logger.error(f"{request_id} ❌ Exception after {elapsed:.2f}s: {type(e).__name__}: {e}", exc_info=True)
+        raise
 
 
 async def send_request_to_tokenizer(
